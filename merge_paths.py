@@ -89,28 +89,38 @@ class IndexedPoint:
         return f"IndexedPoint(p={self.p}, start={self.start}, path={path})"
 
 class APath(ABC):
+    """Some structure wrapping a svg path element or a list of such elements destined to be combined """
 
-    def reverse(self):
-        NotImplementedError()
+    def reverse(self) -> APath:
+        """Reverse structure. Will return a copy"""
+        ...
 
-    def attach_back(self, other: DirectedPath|DirectedPathSegment) -> APath:
-        NotImplementedError()
-
-    def attach_front(self, other:DirectedPath|DirectedPathSegment) -> APath:
-        NotImplementedError()
+    def attach_at_start(self, other:DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
+        """Extends the structure and returns a copy of the combination as an DirectedPathSegment"""
+        ...
+    
+    def attach_at_end(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
+        """Extends the structure and returns a copy of the combination as an DirectedPathSegment"""
+        ...
 
     @property
     @abstractmethod
     def start_point(self) -> IndexedPoint:
+        """The first coordinate of the first element of the structure"""
         ...
     
     @property
     @abstractmethod
     def end_point(self) -> IndexedPoint:
+        """The last coordinate of the last element of the structure"""
         ...
 
 
 class DirectedPath(APath):
+    """Wrapper class around a inkex.paths.Path element allowing reversing, extending. Each 
+    extension does not modified the underling inkex.paths.Path object. Reversing will copy the object 
+    and call the reverse on the inekx.paths.Path object to correctly label start and end points.
+    """
     
     def __init__(self, path: inkex.paths.Path, path_id) -> None:
         self.path: inkex.paths.Path = path
@@ -119,42 +129,41 @@ class DirectedPath(APath):
         self._end : IndexedPoint = IndexedPoint(nodes[-1], start=False, path_index=self) 
         self.path_id: str = path_id
     
-    @property
-    def start_point(self) -> IndexedPoint:
-        return self._start
-    
-    @property
-    def end_point(self) -> IndexedPoint:
-        return self._end
-    
     def reverse(self) -> DirectedPath:
-        if self.path_id.endswith("*"):
+        """Reverse structure. Will return a copy"""
+        if self.path_id.endswith("'"):
             _id = self.path_id[:-1]
         else:
-            _id = self.path_id + "*"
+            _id = self.path_id + "'"
         return DirectedPath(self.path.reverse(), path_id=_id)
 
-    def attach_back(self, other: DirectedPath|DirectedPathSegment) -> APath:
-        if isinstance(other, DirectedPath):
-            return DirectedPathSegment(self, other)
-        elif isinstance(other, DirectedPathSegment):
-            return DirectedPathSegment(self, *other.path_segments)
-        else:
-            raise ValueError("wrong type")
-
-    def attach_front(self, other:DirectedPath) -> APath:
+    def attach_at_start(self, other:DirectedPath) -> DirectedPathSegment:
+        """Extends the structure and returns a copy of the combination as an DirectedPathSegment"""
         if isinstance(other, DirectedPath):
             return DirectedPathSegment(other, self)
         elif isinstance(other, DirectedPathSegment):
             return DirectedPathSegment(*other.path_segments, self)
         else:
-            raise ValueError("wrong type")
+            raise ValueError("Wrong type")
 
-    def ascii_str(self):
-        return f"--[{self.path_id}]-->"
-
-    def __repr__(self) -> str:
-            return f"{self.ascii_str()}"
+    def attach_at_end(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
+        """Extends the structure and returns a copy of the combination as an DirectedPathSegment"""
+        if isinstance(other, DirectedPath):
+            return DirectedPathSegment(self, other)
+        elif isinstance(other, DirectedPathSegment):
+            return DirectedPathSegment(self, *other.path_segments)
+        else:
+            raise ValueError("Wrong type")
+    
+    @property
+    def start_point(self) -> IndexedPoint:
+        """The first coordinate of the first element of the structure"""
+        return self._start
+    
+    @property
+    def end_point(self) -> IndexedPoint:
+        """The last coordinate of the last element of the structure"""
+        return self._end
     
     @property
     def path_id_no_dir(self):
@@ -162,6 +171,13 @@ class DirectedPath(APath):
             return self.path_id[:-1]
         else:
             return self.path_id
+
+    def ascii_str(self):
+        return f"--[{self.path_id}]-->"
+
+    def __repr__(self) -> str:
+            return f"{self.ascii_str()}"
+    
 
 class Position(Enum):
     Front = 0 
@@ -189,7 +205,7 @@ class SegmentMatch:
                 _path = self.other_point.path_index.reverse()
             else:
                 _path = self.other_point.path_index
-            ret = seg.attach_front(_path)
+            ret = seg.attach_at_start(_path)
         else:
             # Position.Back
             # path of `other_point` is attached at the end and must therefore be a start point
@@ -197,11 +213,9 @@ class SegmentMatch:
                 _path = self.other_point.path_index.reverse()
             else:
                 _path = self.other_point.path_index
-            ret = seg.attach_back(_path)
+            ret = seg.attach_at_end(_path)
         
         return ret
-
-
 
 class DirectedPathSegment(APath):
 
@@ -274,7 +288,7 @@ class DirectedPathSegment(APath):
         _segments.reverse()
         return DirectedPathSegment(*_segments)
 
-    def attach_back(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
+    def attach_at_end(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
         if isinstance(other, DirectedPath):
             return DirectedPathSegment(*self.path_segments,  other)
         elif isinstance(other, DirectedPathSegment):
@@ -282,7 +296,7 @@ class DirectedPathSegment(APath):
         else:
             raise ValueError("Wrong type")
 
-    def attach_front(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
+    def attach_at_start(self, other: DirectedPath|DirectedPathSegment) -> DirectedPathSegment:
         if isinstance(other, DirectedPath):
             return DirectedPathSegment(other, *self.path_segments)
         elif isinstance(other, DirectedPathSegment):
@@ -343,7 +357,7 @@ class DirectedPathSegmentSet:
             path_b: DirectedPath = point_b.path_index.reverse()
         else:
             path_b: DirectedPath = point_b.path_index
-        self.add_new_segment(path_a.attach_back(path_b))
+        self.add_new_segment(path_a.attach_at_end(path_b))
 
     def find_existing_matches(self, point_a: IndexedPoint, point_b : IndexedPoint, e:float = DIFF_EPSILON) -> List[SegmentMatch]:
         """ Tries to match the point pair (point_a, point_b), i.e., same location, different paths, to existing  
@@ -432,13 +446,13 @@ class DirectedPathSegmentSet:
 
             match, dir = seg.can_attach_front(other, e)     
             if match: 
-                new_seg = seg.attach_front(other.apply_dir(dir))
+                new_seg = seg.attach_at_start(other.apply_dir(dir))
                 self.seg_list[idx] = new_seg
                 return True
             
             match, dir = seg.can_attach_back(other, e)
             if match:
-                new_seg = seg.attach_back(other.apply_dir(dir), e)
+                new_seg = seg.attach_at_end(other.apply_dir(dir), e)
                 self.seg_list[idx] = new_seg
                 return True
             
