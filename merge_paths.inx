@@ -17,9 +17,10 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 -->
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>FabLab Vorbereitung zum Lasern</name>
+  <name>Merge paths by group</name>
   <id>stsc.eu.MergePaths</id>
-  
+  <param name="epsilon" precision="5" type="float" gui-description="Distance below tow points still are equal" gui-text="Epsilon:">0.02</param>
+  <param name="clearEmptyGroups" type="bool" gui-text="Clear empty groups">false</param>
   <effect>
     <!--object-type>path</object-type-->
     <effects-menu>

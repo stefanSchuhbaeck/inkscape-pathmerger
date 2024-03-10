@@ -16,20 +16,14 @@
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from argparse import ArgumentParser
 import copy
 from dataclasses import dataclass, field
-import sys
-import logging
-from typing import List, Set, Tuple
+from typing import List, Tuple
 import inkex
-from lxml import etree
 from enum import Enum
-from copy import deepcopy
-import numpy as np
 
 
-
-DIFF_EPSILON = 1e-2
 
 @dataclass 
 class IndexedPoint:
@@ -57,14 +51,14 @@ class IndexedPoint:
     def distance(self, other: IndexedPoint):
         return (self.p - other.p).length()
 
-    def is_equal_position(self, other: IndexedPoint, e:float = DIFF_EPSILON):
+    def is_equal_position(self, other: IndexedPoint, e:float ):
         return self.x_equal(other, e) and self.y_equal(other, e)
 
     
-    def x_equal(self, other: IndexedPoint, e: float = DIFF_EPSILON):
+    def x_equal(self, other: IndexedPoint, e: float ):
         return abs(self.x - other.x) < e
     
-    def y_equal(self, other: IndexedPoint, e: float = DIFF_EPSILON):
+    def y_equal(self, other: IndexedPoint, e: float ):
         return abs(self.y - other.y) < e
     
     def __hash__(self):
@@ -167,7 +161,7 @@ class DirectedPath(APath):
     
     @property
     def path_id_no_dir(self):
-        if self.path_id.endswith("*"):
+        if self.path_id.endswith("'"):
             return self.path_id[:-1]
         else:
             return self.path_id
@@ -220,12 +214,9 @@ class SegmentMatch:
 class DirectedPathSegment(APath):
 
     def __init__(self, *paths: DirectedPath) -> None:
-        if isinstance(type(paths[0]), list):
-            print("hi")
-        if isinstance(type(paths[-1]), list):
-            print("hi")
         self.path_segments: List[DirectedPath] = list(paths)
-
+        self.path_id = "-1"
+        self.parent_group = None
 
     def get_connected_path(self):
         connected_path: inkex.paths.Path = copy.copy(self.path_segments[0].path)
@@ -250,10 +241,10 @@ class DirectedPathSegment(APath):
             self.reverse()
         return self
     
-    def is_closed(self, e: float = DIFF_EPSILON) -> bool:
+    def is_closed(self, e: float ) -> bool:
         return self.start_point.is_equal_position(self.end_point, e)
     
-    def can_attach_back(self, other: DirectedPath, e:float = DIFF_EPSILON) -> Tuple[bool, PathDir]:
+    def can_attach_back(self, other: DirectedPath, e:float ) -> Tuple[bool, PathDir]:
         """Check if other can be appended at end  self
         
         --[self]-->{o}--[other]--> or reversed other
@@ -267,7 +258,7 @@ class DirectedPathSegment(APath):
 
         return False, PathDir.NA 
 
-    def can_attach_front(self, other: DirectedPath, e: float = DIFF_EPSILON) -> Tuple[bool, PathDir]:
+    def can_attach_front(self, other: DirectedPath, e: float ) -> Tuple[bool, PathDir]:
         """Check if other can be appended at start of self
 
         --[other]-->{o}--[self]--> or reversed
@@ -359,7 +350,7 @@ class DirectedPathSegmentSet:
             path_b: DirectedPath = point_b.path_index
         self.add_new_segment(path_a.attach_at_end(path_b))
 
-    def find_existing_matches(self, point_a: IndexedPoint, point_b : IndexedPoint, e:float = DIFF_EPSILON) -> List[SegmentMatch]:
+    def find_existing_matches(self, point_a: IndexedPoint, point_b : IndexedPoint, e:float ) -> List[SegmentMatch]:
         """ Tries to match the point pair (point_a, point_b), i.e., same location, different paths, to existing  
         `DirectedPathSegments`. Possible setups: 
 
@@ -406,7 +397,7 @@ class DirectedPathSegmentSet:
         if len(matches) == 1:
             # case 1 in `find_existing_matches` 
             # point pair is attached to one segment only and does not attach to another one either.
-            print("MatchCase 1: append new segment ot existing one")
+            # print("MatchCase 1: append new segment ot existing one")
             m: SegmentMatch = matches[0]
             seg: DirectedPathSegment = self.seg_list.pop(m.segment_index) 
             seg = m.attach(seg)
@@ -418,12 +409,12 @@ class DirectedPathSegmentSet:
                 # case 3 in `find_existing_matches`  same segment
                 # todo: just close segment
                 # seg: DirectedPathSegment = self.seg_list.pop(m1.segment_index)
-                print("MatchCase 3: close existing segment as point pair connects the ends.")
+                # print("MatchCase 3: close existing segment as point pair connects the ends.")
                 pass
             else:
                 # case 4 in `find_existing_matches` 
                 # combine segments without adding a new path
-                print("MatchCase 4: connecting existing segments without new path element.")
+                # print("MatchCase 4: connecting existing segments without new path element.")
                 seg1: DirectedPathSegment = self.seg_list[m1.segment_index]
                 seg2: DirectedPathSegment = self.seg_list[m2.segment_index]
                 self.seg_list.remove(seg1)
@@ -440,7 +431,7 @@ class DirectedPathSegmentSet:
                 seg = DirectedPathSegment(*_paths)
                 self.seg_list.append(seg)
 
-    def append_segment_or_add_segment(self,  other:DirectedPathSegment, e:float = DIFF_EPSILON):
+    def append_segment_or_add_segment(self,  other:DirectedPathSegment, e:float ):
 
         for idx, seg in enumerate(self.seg_list):
 
@@ -463,19 +454,12 @@ class DirectedPathSegmentSet:
 def print_e(e: inkex.elements.BaseElement):
     _id = e.attrib.get("id", None)
     children = len(e.getchildren())
-    print(f"{e.tag_name}[{_id}] -> {e.xml_path} #{children}")
+    # print(f"{e.tag_name}[{_id}] -> {e.xml_path} #{children}")
 
 def print_list(ee: List[inkex.elements.BaseElement]):
     for e in ee:
         print_e(e)
 
-def remove_empty_groups(svg: inkex.elements.SvgDocumentElement, ns):
-    empty_groups = svg.root.xpath("//svg:g[count(*)=0]")
-    for e in empty_groups:
-        if e.TAG == "g" and len(e.getchildren())==0:
-            e.getparent().remove(e)
-    print_list(svg.root.xpath("//svg:g"))
-    return svg
 
 def path_closed(path: inkex.paths.Path):
     return isinstance(path[-1], (inkex.paths.ZoneClose, inkex.paths.zoneClose))
@@ -486,7 +470,7 @@ def get_indexed_points(path: inkex.paths.Path, i):
     return [IndexedPoint(points[0], True, i), IndexedPoint(points[-1], False, i)]
 
 
-def add_close_if_start_stop_same(path: inkex.paths.Path, e: float = DIFF_EPSILON):
+def add_close_if_start_stop_same(path: inkex.paths.Path, e: float ):
     """Assumes open path, no zoneClose or ZoneClose in path. Will not be checked!"""
     if not path_closed(path):
         points: List[inkex.transforms.Vector2d] = list(path.end_points)
@@ -495,7 +479,7 @@ def add_close_if_start_stop_same(path: inkex.paths.Path, e: float = DIFF_EPSILON
             path.close()
     return path
 
-def find_overlapping( points: List[IndexedPoint], e:float = DIFF_EPSILON) -> Set[Tuple[IndexedPoint, IndexedPoint]]:
+def find_overlapping_point_pairs( points: List[IndexedPoint], e:float ) -> List[Tuple[IndexedPoint, IndexedPoint]]:
 
     point_pairs = []
     processed_index = set()
@@ -527,111 +511,152 @@ def find_overlapping( points: List[IndexedPoint], e:float = DIFF_EPSILON) -> Set
     return point_pairs
 
 
-def get_path_end_points(paths: List[DirectedPath]):
-    indexed_points = []
-    for p in paths:
-        indexed_points.append(p.start_point)
-        indexed_points.append(p.end_point)
-
-    indexed_points.sort(key= lambda point: point.y, reverse=True) 
-    return indexed_points
-
-
-
 
 class PrepareForLaserCuttingExtension(inkex.EffectExtension):
 
+    _DEFAULT_EPSILON = 0.02
 
-    
-    def effect(self):
+    @property
+    def epsilon(self) -> float:
+        return self.options.epsilon
 
-        ns = self.svg.root.nsmap 
-        del ns[None]
-        print(ns)
-        # x = list(self.svg.root.xpath("//svg:g", namespaces=ns))
-        # x0 = x[0]
-        # x1 = x[1]
-        # x2 = x[2]
-        # print_e(x0)
-        # print_e(x1)
-        # print_e(x2)
-        self.svg = remove_empty_groups(self.svg, ns)
+    def add_arguments(self, pars: ArgumentParser) -> None:
+        pars.add_argument("--epsilon", type=float, default= self._DEFAULT_EPSILON)
+        pars.add_argument("--clearEmptyGroups", type=inkex.Boolean, default=False)
 
+    def remove_empty_groups(self):
+        empty_groups = self.svg.root.xpath("//svg:g[count(*)=0]")
+        for e in empty_groups:
+            if e.TAG == "g" and len(e.getchildren())==0:
+                e.getparent().remove(e)
+        # print_list(self.svg.root.xpath("//svg:g"))
+
+    def get_sorted_path_groups_depth_first(self) -> List[inkex.elements.Group]:
         groups_with_paths = self.svg.root.xpath("//svg:g[count(child::svg:path)>0]")
 
-        print("#"*80)
-        print(f"found {len(groups_with_paths)} groups with path elements")
+        # print("#"*80)
+        # print(f"found {len(groups_with_paths)} groups with path elements")
         
-        group_by_depth = [(p, len(p.xml_path.split("/"))) for p in groups_with_paths]
-        group_by_depth.sort(key=lambda x: x[1], reverse=True)
-        group_by_depth = [group_by_depth[1]]
-        for path_group, _ in group_by_depth:
-            path_group: inkex.elements.Group
-            print("process ", end="")
-            print_e(path_group)
+        groups_depth_first = [(p, p.xml_path.split("/")) for p in groups_with_paths]
+        groups_depth_first.sort(key=lambda x: x[1], reverse=True)
+        return [i[0] for i in groups_depth_first]
 
-            open_paths:DirectedPath = []
-            c = 0
-            for child in path_group:
-                if isinstance(child, inkex.elements.PathElement):
-                    _p = child.path.transform(child.transform)
-                    c += 1
-                    if not path_closed(_p):
-                        _p = _p.to_relative()
-                        open_paths.append(DirectedPath(_p, path_id=child.attrib["id"]))
-                        print("open path. use ", end="")
-                        print_e(child)
-                    else:
-                        print("closed path. ignore ", end="")
-                        print_e(child)
+    @staticmethod
+    def create_open_directed_path_list(path_group: inkex.elements.Group):
+        # print("process ", end="")
+        # print_e(path_group)
+        open_paths:DirectedPath = []
+        c = 0
+        for child in path_group:
+            if isinstance(child, inkex.elements.PathElement):
+                _p = child.path.transform(child.transform)
+                c += 1
+                if not path_closed(_p):
+                    _p = _p.to_relative()
+                    open_paths.append(DirectedPath(_p, path_id=child.attrib["id"]))
+                    # print("open path. use ", end="")
+                    # print_e(child)
+                else:
+                    # print("closed path. ignore ", end="")
+                    # print_e(child)
+                    pass
+        return open_paths, c
 
-            print(f"from {c} path children found {len(open_paths)} open subpaths")
+    @staticmethod
+    def get_sorted_path_end_points(paths: List[DirectedPath]) -> List[IndexedPoint]:
+        indexed_points: List[IndexedPoint] = []
+        for p in paths:
+            indexed_points.append(p.start_point)
+            indexed_points.append(p.end_point)
+
+        indexed_points.sort(key= lambda point: point.y, reverse=True) 
+        return indexed_points
+
+    def create_merged_segments(self, groups: List[inkex.elements.Group]):
+        merged_paths: List[DirectedPathSegment] = []
+        for path_group in groups:
+
+            open_paths:List[DirectedPath]
+            num_path_elements: int
+            open_paths, num_path_elements = self.create_open_directed_path_list(path_group)
+            # print(f"from {num_path_elements} path children found {len(open_paths)} open subpaths")
 
             # open_paths = [open_paths[36],open_paths[35],open_paths[34]]
-            path_end_points = get_path_end_points(open_paths)
+            path_end_points = self.get_sorted_path_end_points(open_paths)
             
-            overlapping_point_set = find_overlapping(path_end_points)
+            overlapping_point_set = find_overlapping_point_pairs(path_end_points, e=self.epsilon)
 
-            print(f"found {len(overlapping_point_set)} overlapping points out of {len(path_end_points)} points")
-
-
-            print("#"*80)
+            # print(f"found {len(overlapping_point_set)} overlapping points out of {len(path_end_points)} points")
+            # print("#"*80)
 
             processed_paths: DirectedPathSegmentSet = DirectedPathSegmentSet()
 
-
-
-
             for idx, (point_a, point_b)  in enumerate(overlapping_point_set):
-                if point_a.path_id_no_dir == "path91" or point_b.path_id_no_dir == "path91":
-                    print("hi")
-                print(f"process pair {idx}: ({point_a}, {point_b})") 
-                matched_segments: List[SegmentMatch]= processed_paths.find_existing_matches(point_a, point_b)
+                # print(f"process pair {idx}: ({point_a}, {point_b})") 
+                matched_segments: List[SegmentMatch]= processed_paths.find_existing_matches(point_a, point_b, e=self.epsilon)
                 if len(matched_segments) > 0:
                     # append to existing segment
                     # 1. find segment to which the DirectedPath can be attached to. 
                     # 2. check if the new segment can be attached to another segment. 
                     #     If yes  do so. This happens if the new path fills a gap <----->< * new one * ><------>
-                    print(f"process pair {idx}: found matching {len(matched_segments)} segment(s) in processed_paths. Append to it/them.") 
+                    # print(f"process pair {idx}: found matching {len(matched_segments)} segment(s) in processed_paths. Append to it/them.") 
                     processed_paths.process_segment_matches(matched_segments)
 
                 else: 
-                    print(f"process pair {idx}: No matching segment in processed_paths found. Add new segment") 
+                    # print(f"process pair {idx}: No matching segment in processed_paths found. Add new segment") 
                     processed_paths.create_and_append_path_to_set(point_a, point_b)
 
             for idx, seg in enumerate(processed_paths.seg_list):
-                print(f"{idx}: segment path")
-                print(seg.get_connected_path())
-            print('Hi')
+                seg.path_id = f"{path_group.eid}-{idx}"
+                seg.parent_group = path_group
+                merged_paths.append(seg)
+        return merged_paths
+    
+    def by_id(self, id, must_exist: bool = False) -> inkex.elements.BaseElement:
+        ret = self.svg.root.xpath(f"//*[@id='{id}']")
+        if len(ret) == 0:
+            if must_exist:
+                raise ValueError(f"found not element with id '{id}'")
+            else:
+                return None
+        elif len(ret) > 1:
+            raise ValueError(f"found {len(ret)} elements with id '{id}'. There should only be one!")
+        else:
+            return ret[0]
+    
+    def apply_merges_to_svg(self, merged_segments: List[DirectedPathSegment]):
+        for seg in merged_segments:
+            _parent = self.by_id(seg.parent_group.eid, must_exist=True)
+            _style = None
+            ns_map = None
+            for path in seg.path_segments:
+                _el = self.by_id(path.path_id_no_dir, must_exist=True)
+                if _style is None:
+                    _style = _el.attrib["style"]
+                    ns_map = _el.nsmap
+                _parent.remove(_el)
+            
+            new_elm = inkex.PathElement(attrib={"style":_style}, nsmap=ns_map)
+            new_elm.set_path(seg.get_connected_path())
+            new_elm.set_id(seg.path_id)
+            _parent.add(new_elm)
+            # delete old path segments in group
 
+    def effect(self):
+        if self.options.clearEmptyGroups:
+            self.remove_empty_groups()
+
+        groups_by_depth: List[inkex.elements.Group] = self.get_sorted_path_groups_depth_first()
+        # groups_by_depth = [groups_by_depth[1]]
+
+        merged = self.create_merged_segments(groups_by_depth)
+        self.apply_merges_to_svg(merged)
         # start with inner most group 
         # get path from group, make it absolute, break ist apart to find path s
 
-        print("hi")
         
 
         
 if __name__ == '__main__':
-    inkex.utils.debug("hello")
-    inkex.utils.debug(sys.argv)
+    # inkex.utils.debug(sys.argv)
     PrepareForLaserCuttingExtension().run()        
