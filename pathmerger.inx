@@ -28,6 +28,6 @@
     </effects-menu>
   </effect>
   <script>
-    <command location="inx" interpreter="python">merge_paths.py</command>
+    <command location="inx" interpreter="python">pathmerger.py</command>
   </script>
 </inkscape-extension>
